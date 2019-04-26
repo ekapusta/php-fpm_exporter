@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/ekapusta/php-fpm_exporter/phpfpm"
 	"github.com/gosuri/uitable"
-	"github.com/hipages/php-fpm_exporter/phpfpm"
 	"github.com/spf13/cobra"
 )
 
