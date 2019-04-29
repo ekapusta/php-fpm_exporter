@@ -15,9 +15,13 @@ package cmd
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/ekapusta/php-fpm_exporter/phpfpm"
@@ -30,6 +34,7 @@ import (
 var (
 	listeningAddress string
 	metricsEndpoint  string
+	pidFile          string
 	scrapeURIs       []string
 	fixProcessCount  bool
 )
@@ -118,6 +123,7 @@ func init() {
 
 	serverCmd.Flags().StringVar(&listeningAddress, "web.listen-address", ":9253", "Address on which to expose metrics and web interface.")
 	serverCmd.Flags().StringVar(&metricsEndpoint, "web.telemetry-path", "/metrics", "Path under which to expose metrics.")
+	serverCmd.Flags().StringVar(&pidFile, "pid", "/var/run/php-fpm_exporter.pid", "Path under which to expose metrics.")
 	serverCmd.Flags().StringSliceVar(&scrapeURIs, "phpfpm.scrape-uri", []string{"tcp://127.0.0.1:9000/status"}, "FastCGI address, e.g. unix:///tmp/php.sock;/status or tcp://127.0.0.1:9000/status")
 	serverCmd.Flags().BoolVar(&fixProcessCount, "phpfpm.fix-process-count", false, "Enable to calculate process numbers via php-fpm_exporter since PHP-FPM sporadically reports wrong active/idle/total process numbers.")
 
@@ -134,4 +140,25 @@ func init() {
 	}
 
 	mapEnvVars(envs, serverCmd)
+	writePidFile(pidFile)
+}
+
+func writePidFile(pidFile string) error {
+	// Read in the pid file as a slice of bytes.
+	if piddata, err := ioutil.ReadFile(pidFile); err == nil {
+		// Convert the file contents to an integer.
+		if pid, err := strconv.Atoi(string(piddata)); err == nil {
+			// Look for the pid in the process list.
+			if process, err := os.FindProcess(pid); err == nil {
+				// Send the process a signal zero kill.
+				if err := process.Signal(syscall.Signal(0)); err == nil {
+					// We only get an error if the pid isn't running, or it's not ours.
+					return fmt.Errorf("pid already running: %d", pid)
+				}
+			}
+		}
+	}
+	// If we get here, then the pidfile didn't exist,
+	// or the pid in it doesn't belong to the user running this app.
+	return ioutil.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0664)
 }
